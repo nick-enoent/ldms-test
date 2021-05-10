@@ -31,5 +31,5 @@ _local = socket.gethostname()
 cmd_args = []
 if inst["ssh_host"] not in [ "localhost", _local ]:
 	cmd_args += ["/bin/ssh", "-t", inst["ssh_host"], "-p", str(inst["ssh_port"])]
-cmd_args += [ "/usr/bin/singularity", "exec", "instance://{}".format(args.inst[0]), "bash", "-l"]
-os.execl(cmd_args[0], *cmd_args)
+cmd_args += [ "singularity", "exec", "instance://{}".format(args.inst[0]), "bash", "-l"]
+os.execlp(cmd_args[0], *cmd_args)
