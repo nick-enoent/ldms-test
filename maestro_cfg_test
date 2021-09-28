@@ -70,45 +70,73 @@ members:
     port: 2379
 
 """ % { "cfg_prefix" : CFG_PREFIX }
-MAESTRO_CFG = """hosts:
-  - names : &sampler-hosts "node-[1-8]-[%(smplr_port)s]"
-    hosts : "node-[1-8]"
+MAESTRO_CFG = """endpoints:
+  - names : &sampler-endpoints "node-[1-8]-[%(smplr_port)s]"
+    group : &samplers "samplers"
+    hosts : &sampler-hosts "node-[1-8]"
     ports : &sampler-ports "[%(smplr_port)s]"
     xprt : sock
+    auth :
+      name : munge
 
-  - names : &l1-agg-hosts "agg-[1-3]"
-    hosts : "agg-[1-3]"
+  - names : &l1-agg-endpoints "agg-[1-3]"
+    group : &l1-agg "l1-agg"
+    hosts : &l1-agg-hosts "agg-[1-3]"
     ports : "[%(agg_port)s]"
     xprt : sock
+    auth :
+      name : munge
 
-  - names : &l2-agg-hosts "agg-4"
-    hosts : "headnode"
+  - names : &l2-agg-endpoints "agg-4"
+    group : &l2-agg "l2-agg"
+    hosts : &l2-agg-hosts "headnode"
     ports: "%(headnode_port)s"
     xprt : sock
+    auth :
+      name : munge
+
+groups:
+  - endpoints : *sampler-endpoints
+    name      : *samplers
+    interfaces :
+      - *sampler-hosts
+
+  - endpoints : *l1-agg-endpoints
+    name      : *l1-agg
+    interfaces :
+      - *sampler-hosts
+      - *l1-agg-hosts
+      - *l2-agg-hosts
+
+  - endpoints : *l2-agg-endpoints
+    name      : *l2-agg
+    interfaces :
+      - *l1-agg-hosts
+      - *l2-agg-hosts
 
 aggregators:
-  - names : *l1-agg-hosts
-    hosts : *l1-agg-hosts
-    group : l1-agg
+  - names     : *l1-agg-endpoints
+    endpoints : *l1-agg-endpoints
+    group     : *l1-agg
 
-  - names : *l2-agg-hosts
-    hosts : *l2-agg-hosts
-    group : l2-agg
+  - names     : *l2-agg-endpoints
+    endpoints : *l2-agg-endpoints
+    group     : *l2-agg
 
 producers:
 # This informs the L1 load balance group what is being distributed across
 # the L1 aggregator nodes
-  - names     : *sampler-hosts
-    hosts     : *sampler-hosts
-    group     : l1-agg
+  - names     : *sampler-endpoints
+    endpoints : *sampler-endpoints
+    group     : *l1-agg
     reconnect : 20s
     type      : active
     updaters  :
       - l1-all
 
-  - names     : *l1-agg-hosts
-    hosts     : *l1-agg-hosts
-    group     : l2-agg
+  - names     : *l1-agg-endpoints
+    endpoints  : *l1-agg-endpoints
+    group     : *l2-agg
     reconnect : 20s
     type      : active
     updaters  :
