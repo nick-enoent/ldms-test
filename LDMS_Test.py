@@ -1162,7 +1162,7 @@ class MsgSrcStats(XCmp):
 
 @dataclass()
 class MsgChannelClientStats(XCmp):
-    name:         str            = None
+    msg_tag:      str            = None
     client_match: str            = None
     client_desc:  str            = None
     is_regex:     int            = None
@@ -1174,13 +1174,13 @@ class MsgChannelStats(XCmp):
     rx:      MsgCounters = None
     sources: dict           = None
     clients: dict           = None
-    name:    str            = None
+    msg_tag: str            = None
 
 @dataclass()
 class MsgClientStats(XCmp):
     tx:       MsgCounters = None
     drops:    MsgCounters = None
-    channels: dict           = None
+    tags    : dict           = None
     dest:     LdmsAddr     = None
     is_regex: int            = None
     match:    str            = None

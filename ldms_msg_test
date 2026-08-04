@@ -142,7 +142,7 @@ COMMIT_ID = args.commit_id
 SRC = args.src
 CLUSTERNAME = args.clustername
 DB = args.data_root
-LDMSD_PORT = 10000
+LDMSD_PORT = 411
 
 #### spec #### -------------------------------------------------------
 
@@ -298,17 +298,17 @@ node7 = cluster.get_container("node-7")
 node8 = cluster.get_container("node-8")
 nodes = [ node1, node2, node3, node4, node5, node6, node7, node8 ]
 
+FOO_UID = 9000
+FOO_GID = 9000
+BAR_UID = 9001
+BAR_GID = 9001
+USERS_GID = 100
+
 # add `foo` and `bar` users
 log.info("-- Adding 'foo' and 'bar' users --")
 for node in nodes:
-    node.exec_run("useradd foo && usermod -aG users foo")
-    node.exec_run("useradd bar && usermod -aG users bar")
-
-FOO_UID = 1000
-FOO_GID = 1000
-BAR_UID = 1001
-BAR_GID = 1001
-USERS_GID = 100
+    node.exec_run(f"useradd -u {FOO_UID} foo && usermod -aG users foo")
+    node.exec_run(f"useradd -u {BAR_UID} bar && usermod -aG users bar")
 
 UID_TBL = { 'foo': FOO_UID, FOO_UID: FOO_UID,
             'bar': BAR_UID, BAR_UID: BAR_UID,
@@ -399,7 +399,7 @@ def py_pty_msg_stats_get(pty):
     exec(f'ret = {out}', globals(), lcl)
     ret = lcl['ret']
     # list_xsort(ret)
-    ret.sort(key = lambda o: o.name)
+    ret.sort(key = lambda o: o.msg_tag)
     return ret
 
 def py_pty_msg_client_stats_get(pty):
@@ -489,10 +489,11 @@ def py_pty(node, script_path, user = None):
     log.info(f"starting {script_path} on {node.name} {as_user}")
     _cmd = f"ZAP_POOLS=8 /usr/bin/python3 -i {script_path}"
     if user:
-        shell = f"su -s /bin/bash {user}"
+        # shell = f"su -s /bin/bash -l {user}"
+        cmd = f"/bin/bash -l -c 'su -s /bin/bash {user} -c \"{_cmd}\"'"
     else:
-        shell = f"/bin/bash"
-    cmd = f"{shell} -c '{_cmd}'"
+        cmd = f"/bin/bash -l -c '{_cmd}'"
+    # cmd = f"{shell} -c '{_cmd}'"
     _pty = node.exec_interact(cmd)
     _pty.cmd = cmd
     _pty.node = node
@@ -566,8 +567,8 @@ while test1: # will break
 class SData(object):
     """MsgData representation"""
 
-    __slots__ = ('name', 'src', 'tid', 'uid', 'gid', 'perm', 'is_json', 'data')
-    __cmp_fields__ = ('name', 'src', 'uid', 'gid', 'perm', 'is_json', 'data')
+    __slots__ = ('name', 'src', 'tid', 'uid', 'gid', 'perm', 'is_json', 'data', 'type')
+    __cmp_fields__ = ('name', 'src', 'uid', 'gid', 'perm', 'is_json', 'data', 'type')
     # cmp_fields omitted 'tid'
 
     def __init__(self, *args, **kwargs):
@@ -663,7 +664,7 @@ class ClientTrack(object):
         self._stats = MsgClientStats(
                         tx       = MsgCounters(None, None, 0, 0),
                         drops    = MsgCounters(None, None, 0, 0),
-                        channels = None,
+                        tags     = None,
                         dest     = dest,
                         match    = match,
                         is_regex = is_regex,
@@ -702,7 +703,7 @@ class ClientTrack(object):
         self._stats.tx.count += 1
         self._stats.tx.bytes += _bytes
         s = self._channels.setdefault(name, MsgChannelClientStats(
-                                name         = name,
+                                msg_tag      = name,
                                 client_match = self._stats.match,
                                 client_desc  = self._stats.desc,
                                 is_regex     = self._stats.is_regex,
@@ -716,7 +717,7 @@ class ClientTrack(object):
 
     def init_channel(self, name):
         s = self._channels.setdefault(name, MsgChannelClientStats(
-                                name         = name,
+                                msg_tag      = name,
                                 client_match = self._stats.match,
                                 client_desc  = self._stats.desc,
                                 is_regex     = self._stats.is_regex,
@@ -756,7 +757,7 @@ class MsgTrack(object):
         ss = MsgChannelStats( rx = self._rx,
                           sources = list(self._sources.values()),
                           clients = None,
-                          name = self._name )
+                          msg_tag = self._name )
         ss.xsort()
         return ss
 
@@ -820,11 +821,11 @@ class ProcessTrack(object):
             ss.clients = list()
             for ct in self._ct:
                 for _s in ct._channels.values():
-                    if _s.name != ss.name:
+                    if _s.msg_tag != ss.msg_tag:
                         continue
                     ss.clients.append(_s)
             ret.append(ss)
-        ret.sort(key = lambda o: o.name)
+        ret.sort(key = lambda o: o.msg_tag)
         return ret
 
     def getClientStats(self):
