@@ -1,0 +1,42 @@
+daemons:
+  - names: &samplerd "samplerd-[1]"
+    hosts:
+    endpoints:
+      - names: *samplerd
+        ports: 10001
+        xprt: sock
+  - names: &l1 "l1-1"
+    hosts:
+    endpoints:
+      - names: *l1
+        ports: 10001
+        xprt: sock
+
+aggregators:
+  - daemons: *l1
+    peers:
+      - daemons: *samplerd
+        endpoints: *samplerd
+        reconnect: 20s
+        type: active
+
+plugins:
+  meminfo:
+    - name: meminfo
+      interval: 1s
+      config:
+        - schema: meminfo
+  store_sos:
+    - name : store_sos
+      config :
+        - path :
+samplers:
+  - daemons: *samplerd
+    plugins: [meminfo]
+
+stores :
+  sos-meminfo :
+    daemons : *l1
+    container : ldms_data
+    schema : meminfo
+    plugin : store_sos
