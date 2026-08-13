@@ -1,0 +1,4 @@
+cluster: scale_test
+members:
+  - host: 127.0.0.1
+    port: 2379

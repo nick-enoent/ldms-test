@@ -1,0 +1,90 @@
+daemons :
+  - names : "L2-agg"
+    hosts : "node-head"
+    msg_enable : True
+    stream_enable : true
+    endpoints :
+      - names : "L2-agg-10403"
+        ports : 10403
+        xprt  : sock
+        maestro_comm : True
+        auth  :
+          name   : munge
+          plugin : munge
+
+  - names : &l1 "L1-agg-[1-16]"
+    metric_sets_default_authz:
+      uid : 0
+      gid : 0
+      perm : "777"
+    hosts : "node[1-2]"
+    endpoints :
+      - names : *l1
+        ports : "[10401-10416]"
+        xprt  : sock
+        maestro_comm : True
+        auth  :
+          name   : munge
+          plugin : munge
+
+  - names : &samplers "sampler-[1-32]"
+    hosts : &sampler-hosts "node[1-2]"
+    set_memory : 100mb
+    endpoints :
+      - names : &sampler-ep "sampler-[1-32]"
+        ports : "[10001-10032]"
+        xprt  : sock
+        maestro_comm : True
+        auth  :
+          name   : munge
+          plugin : munge
+
+aggregators :
+  - daemons : *l1
+    subscribe :
+      - stream : kokkos-perf-data
+        regex  : .*
+    peers   :
+      - daemons   : *samplers
+        endpoints : *sampler-ep
+        reconnect : 20s
+        type      : active
+        updaters  :
+          - mode     : pull
+            interval : 1.0s
+
+  - daemons : "L2-agg"
+    peers   :
+      - daemons   : *l1
+        endpoints : *l1
+        reconnect : 20s
+        type      : active
+        updaters  :
+          - mode     : pull
+            interval : 1s
+
+samplers :
+  - daemons : *samplers
+    plugins : [ "meminfo1" ]
+
+plugins :
+  meminfo1 :
+    name     : meminfo
+    interval : '1s'
+    config   :
+      - schema : meminfo
+        perm   : "0777"
+        interval : "1s"
+
+  store_sos1 :
+    name   : store_sos
+    config :
+      - path : /home/DATA
+
+stores :
+  sos-meminfo :
+    daemons   : "L2-agg"
+    container : ldms_data
+    schema    : meminfo
+    flush     : 10s
+    plugin    : store_sos1
