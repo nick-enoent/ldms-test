@@ -181,9 +181,6 @@ class LdmsdScaleTest(YamlCfg):
         for grp in self.aggregators:
             config_grp = None
             aggs = expand_names(grp)
-            if len(aggs) > 1:
-                continue
-            cfg_grp = None
             for cfg_grp in self.cluster_config['aggregators']:
                 if grp == cfg_grp['daemons']:
                     config_grp = cfg_grp
@@ -194,8 +191,8 @@ class LdmsdScaleTest(YamlCfg):
                 continue
             for peers in config_grp['peers']:
                 peer_list += expand_names(peers['daemons'])
+            peer_cnt = 0
             for ldmsd in aggs:
-                peer_cnt = 0
                 ep_key = next(iter(self.daemons[ldmsd]['endpoints'].keys()))
                 ep = self.daemons[ldmsd]['endpoints'][ep_key]
                 auth_name, plugin, auth_opt = check_auth(ep)
@@ -205,19 +202,73 @@ class LdmsdScaleTest(YamlCfg):
                                     plugin,
                                     { 'conf' : auth_opt })
                 rc = comm.connect(timeout=5)
+                if rc:
+                    log.info(f'Error connecting to {ldmsd}: %d', rc)
                 rc, msg = comm.prdcr_status()
                 comm.close()
                 msg = fmt_status(msg)
                 if not msg:
                     self.test_fail(rc, msg)
-                peer_cnt = len(msg)
-                if peer_cnt != len(peer_list):
-                    msg = (f'Not all producers have connected properly')
-                    self.test_fail(errno.ENODATA, msg)
-                if rc:
-                    log.info(f'Error connecting to {ldmsd}: %d', rc)
+                peer_cnt += len(msg)
+            if peer_cnt != len(peer_list):
+                msg = (f'Not all producers have connected properly')
+                self.test_fail(errno.ENODATA, msg)
         log.info('Producer Status OK')
         return True
+
+    def confirm_plugins(self):
+        for grp in self.stores:
+            ldmsd_list = expand_names(grp)
+            for ldmsd in ldmsd_list:
+                ep_key = next(iter(self.daemons[ldmsd]['endpoints'].keys()))
+                ep = self.daemons[ldmsd]['endpoints'][ep_key]
+                auth, plugin, auth_opt = check_auth(ep)
+                comm = Communicator(ep['xprt'],
+                                    self.daemons[ldmsd]['addr'],
+                                    ep['port'],
+                                    plugin,
+                                    { 'conf' : auth_opt })
+                rc = comm.connect()
+                rc, msg = comm.plugn_status()
+                if rc:
+                    print(f'Error {rc}: Error getting plugin status of {ldmsd}: '\
+                          f'{msg}')
+                    self.test_fail(rc, msg)
+                msg = fmt_status(msg)
+                store_list = []
+                for store in msg:
+                    store_list.append(store['name'])
+                for store in self.stores[grp]:
+                    pname = self.stores[grp][store]['plugin']
+                    if pname not in store_list:
+                        self.test_fail(errno.ENOENT, f'Plugin {store} for {ldmsd} not loaded successfully')
+
+        for grp in self.samplers:
+            ldmsd_list = expand_names(grp)
+            for ldmsd in ldmsd_list:
+                ep_key = next(iter(self.daemons[ldmsd]['endpoints'].keys()))
+                ep = self.daemons[ldmsd]['endpoints'][ep_key]
+                auth, plugin, auth_opt = check_auth(ep)
+                comm = Communicator(ep['xprt'],
+                                    self.daemons[ldmsd]['addr'],
+                                    ep['port'],
+                                    plugin,
+                                    { 'conf' : auth_opt })
+                comm.connect()
+                rc, msg = comm.plugn_status()
+                if rc:
+                    print(f'Error {rc}: Error getting plugin status of {ldmsd}: '\
+                          f'{msg}')
+                    self.test_fail(rc, msg)
+                msg = fmt_status(msg)
+                plugin_list = []
+                for plugn in msg:
+                    plugin_list.append(plugn['name'])
+                for plugin in self.samplers[grp]['plugins']:
+                    if plugin not in plugin_list:
+                        self.test_fail(errno.ENOENT, f'Plugin {plugin} for {ldmsd} not loaded successfully')
+
+        return 0
 
     def maestro_scale_test(self):
         COUNT = 0
@@ -262,6 +313,7 @@ class LdmsdScaleTest(YamlCfg):
         COUNT = 0
         ELAPSED = 0
         rc = self.confirm_producers()
+        rc = self.confirm_plugins()
         while self.FLAP:
             log.info(f'=================`loop`: {COUNT} -- Running for {ELAPSED}================\n')
             if self.args.debug:
