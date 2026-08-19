@@ -14,8 +14,6 @@ from ldmsd.parser_util import *
 import ldmsd.hostlist as hostlist
 from ldmsd.ldmsd_communicator import Communicator, fmt_status
 
-from IPython.core.debugger import set_trace
-
 class LdmsdScaleTest(YamlCfg):
     def __init__(self, client, name, cluster_config, args):
         super().__init__(client, name, cluster_config, args)
@@ -124,6 +122,10 @@ class LdmsdScaleTest(YamlCfg):
         if set(current_pids) != set(last_pids):
             for ldmsd in list(self.pid_list):
                 if self.pid_list[ldmsd] not in current_pids:
+                    if ldmsd not in self.ldmsd_flap:
+                        self.test_fail(errno.ESRCH,
+                                       f'Unexpected downed LDMSD {ldmsd} with '\
+                                       f'pid {self.pid_list[ldmsd]}')
                     self.pid_list.pop(ldmsd)
         sp.terminate()
         return len(self.pid_list)
@@ -451,7 +453,7 @@ if __name__ == "__main__":
     log.setLevel(log_level)
     tester = LdmsdScaleTest(None, None, conf_spec, args)
     if args.maestro:
-        rc = self.start_ldmsds(no_cfg=True)
+        rc = self.start_all_ldmsd(no_cfg=True)
         tester.maestro_scale_test()
     else:
         tester.start_all_ldmsd()
