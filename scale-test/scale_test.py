@@ -14,6 +14,8 @@ from ldmsd.parser_util import *
 import ldmsd.hostlist as hostlist
 from ldmsd.ldmsd_communicator import Communicator, fmt_status
 
+from IPython.core.debugger import set_trace
+
 class LdmsdScaleTest(YamlCfg):
     def __init__(self, client, name, cluster_config, args):
         super().__init__(client, name, cluster_config, args)
@@ -48,12 +50,13 @@ class LdmsdScaleTest(YamlCfg):
         for ldmsd in self.ldmsd_flap:
             ep_key = next(iter(self.daemons[ldmsd]['endpoints'].keys()))
             ep = self.daemons[ldmsd]['endpoints'][ep_key]
+            auth, plugin, auth_opt = check_auth(ep)
             host = self.daemons[ldmsd]['addr']
             if no_cfg:
                 cmd_str = f'ldmsd -x {ep["xprt"]}:{ep["port"]}:{host} -a {plugin} '\
                           f'-l {self.args.LOG_PATH}/{ldmsd}.log > /dev/null 2>&1 & echo $!'
-                if auth_conf:
-                    cmd_str += f' -A {auth_conf}'
+                if auth_opt:
+                    cmd_str += f' -A {auth_opt}'
             else:
                 cmd_str = f'ldmsd -y {self.args.yaml_file} -n {ldmsd} -l '\
                           f'{self.args.LOG_PATH}/{ldmsd}.log -v INFO > /dev/null '\
@@ -81,11 +84,11 @@ class LdmsdScaleTest(YamlCfg):
                 xprt = ep['xprt']
                 port = ep['port']
                 host = self.daemons[ldmsd]['addr']
-                auth, plugin, auth_conf = check_auth(ep)
+                auth, plugin, auth_opt = check_auth(ep)
                 cmd_str = f'ldmsd -x {ep["xprt"]}:{ep["port"]}:{host} -a {plugin} '\
                           f'-l {self.args.LOG_PATH}/{ldmsd}.log > /dev/null 2>&1 & echo $!'
-                if auth_conf:
-                    cmd_str += f' -A {auth_conf}'
+                if auth_opt:
+                    cmd_str += f' -A {auth_opt}'
             else:
                 cmd_str = f'ldmsd -y {self.args.yaml_file} -n {ldmsd} -l '\
                           f'{self.args.LOG_PATH}/{ldmsd}.log -v INFO > /dev/null '\
@@ -175,9 +178,9 @@ class LdmsdScaleTest(YamlCfg):
                         f'-l', f'{self.args.LOG_PATH}/maestro.log']
         if self.args.benchmark:
             maestro_args += ['--benchmark', f'{self.maestro_args["benchmark"]}']
-        self.maestro = subprocess.Popen(maestro_args, 'scale_test',
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
+        self.maestro = subprocess.Popen(maestro_args,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
 
     def confirm_producers(self):
         for grp in self.aggregators:
@@ -453,7 +456,7 @@ if __name__ == "__main__":
     log.setLevel(log_level)
     tester = LdmsdScaleTest(None, None, conf_spec, args)
     if args.maestro:
-        rc = self.start_all_ldmsd(no_cfg=True)
+        rc = tester.start_all_ldmsd(no_cfg=True)
         tester.maestro_scale_test()
     else:
         tester.start_all_ldmsd()
